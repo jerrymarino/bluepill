@@ -25,7 +25,17 @@
 }
 
 - (void)addTestCase:(BPTestCase *)testCase {
+    // Don't allow allocation with duplicate names.
+    for (BPTestCase *t in _testCases) {
+        if ([t.name isEqualToString:testCase.name]) {
+            return;
+        }
+    }
     [self.testCases addObject:testCase];
+}
+
+- (void)removeTestCase:(BPTestCase *)testCase {
+    [self.testCases removeObject:testCase];
 }
 
 - (NSUInteger)numTests {
@@ -37,7 +47,6 @@
         printf("  %s/%s\n", [self.name UTF8String], [testCase.name UTF8String]);
     }
 }
-
 - (NSString *)description {
     return [NSString stringWithFormat:@"%@ / %lu testCases", self.name, [self.testCases count]];
 }

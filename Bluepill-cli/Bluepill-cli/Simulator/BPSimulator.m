@@ -96,11 +96,11 @@
                                                      error:errPtr];
     [self.simDeviceTemplates addObject:simDevice];
     if (!simDevice && *errPtr) {
-        [BPUtils printInfo:ERROR withString:@"Create simulator failed with error: %@", [self getErrorDescription:errPtr]];
+        [BPUtils printInfo:ERROR withString:@"2: Create simulator failed with error: %@", [self getErrorDescription:errPtr]];
         return nil;
     }
     [simDevice bootWithOptions:nil error:errPtr];
-    if (errPtr) {
+    if (*errPtr) {
         [BPUtils printInfo:ERROR withString:@"Boot simulator failed with error: %@", [self getErrorDescription:errPtr]];
         return nil;
     }
@@ -126,7 +126,7 @@
         return nil;
     } else {
         [simDevice shutdownWithError:errPtr];
-        if(errPtr) {
+        if(*errPtr) {
             [BPUtils printInfo:ERROR withString:@"Shutdown simulator failed with error: %@", [self getErrorDescription:errPtr]];
             [deviceSet deleteDeviceAsync:simDevice completionHandler:^(NSError *error) {
                 if (error) {
