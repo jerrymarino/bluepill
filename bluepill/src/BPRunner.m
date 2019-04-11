@@ -235,7 +235,7 @@ maxprocs(void)
     __block int rc = 0;
 
     int maxProcs = maxprocs();
-    int seconds = 0;
+    int startts = [[NSDate date] timeIntervalSince1970];
     __block NSMutableArray *taskList = [[NSMutableArray alloc] init];
     __block NSMutableArray *deviceList = [[NSMutableArray alloc] init];
     self.nsTaskList = [[NSMutableArray alloc] init];
@@ -299,8 +299,9 @@ maxprocs(void)
                 launchedTasks++;
             }
         }
-        sleep(1);
-        if (seconds % 30 == 0) {
+        usleep(1000);
+        int currentts = [[NSDate date] timeIntervalSince1970];
+        if ((currentts - startts % 30) == 0) {
             NSString *listString;
             @synchronized (self) {
                 listString = [taskList componentsJoinedByString:@", "];
@@ -317,7 +318,6 @@ maxprocs(void)
                 [BPUtils runShell:[NSString stringWithFormat:@"/bin/ps aux >> %@", psLogFile]];
             }
         }
-        seconds += 1;
         [self addCounters];
     }
 
