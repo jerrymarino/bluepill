@@ -12,6 +12,7 @@
 #import "BPConstants.h"
 #import "BPXCTestFile.h"
 #import "BPConfiguration.h"
+#import "BPTestClass.h"
 
 @implementation BPUtils
 
@@ -164,6 +165,17 @@ static BOOL quiet = NO;
     config = [config mutableCopy];
     NSMutableSet *testsToRun = [NSMutableSet new];
     NSMutableSet *testsToSkip = [NSMutableSet new];
+    NSMutableSet *allTestCasesToSkip = [NSMutableSet new];
+    
+    // If the user specified test cases to run by include, then we skip tests not present here.
+    if (config.testCasesToRun) {
+        for (BPXCTestFile *xctFile in xctTestFiles) {
+            [allTestCasesToSkip addObjectsFromArray:xctFile.allTestCases];
+        }
+        [allTestCasesToSkip minusSet:[NSSet setWithArray:config.testCasesToRun]];
+    }
+
+    
     for (BPXCTestFile *xctFile in xctTestFiles) {
         if (config.testCasesToRun) {
             [testsToRun unionSet:[NSSet setWithArray:[BPUtils expandTests:config.testCasesToRun withTestFile:xctFile]]];
@@ -176,10 +188,12 @@ static BOOL quiet = NO;
         }
     }
 
+    [testsToSkip unionSet:allTestCasesToSkip];
     if (testsToRun.allObjects.count > 0) {
         config.testCasesToRun = testsToRun.allObjects;
     }
     config.testCasesToSkip = testsToSkip.allObjects;
+
     return config;
 }
 

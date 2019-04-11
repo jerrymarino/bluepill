@@ -194,11 +194,7 @@ NSString *objcNmCmdline = @"nm -U '%@' | grep ' t ' | cut -d' ' -f3,4 | cut -d'-
 }
 
 - (NSUInteger)numTests {
-    int count = 0;
-    for (BPTestClass *testClass in self.testClasses) {
-        count += [testClass numTests];
-    }
-    return count;
+    return [self.allTestCases count];
 }
 
 - (NSArray *)allTestCases {
@@ -208,7 +204,7 @@ NSString *objcNmCmdline = @"nm -U '%@' | grep ' t ' | cut -d' ' -f3,4 | cut -d'-
             [ret addObject:[NSString stringWithFormat:@"%@/%@", testClass.name, testCase.name]];
         }
     }
-    return ret;
+    return [[NSSet setWithArray:ret] allObjects];
 }
 
 - (NSString *)description {
