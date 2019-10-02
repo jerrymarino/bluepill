@@ -23,6 +23,7 @@
 #import "BPTestDaemonConnection.h"
 #import "BPXCTestFile.h"
 #import <objc/runtime.h>
+#import "PrivateHeaders/CoreSimulator/CoreSimulator.h"
 
 #define NEXT(x)     { [Bluepill setDiagnosticFunction:#x from:__FUNCTION__ line:__LINE__]; CFRunLoopPerformBlock(CFRunLoopGetMain(), kCFRunLoopCommonModes, ^{ (x); }); }
 #define NEXT_AFTER(delay, x) { \
@@ -488,16 +489,80 @@ static void onInterrupt(int ignore) {
 - (void)runnerCompletedWithContext:(BPExecutionContext *)context {
     [context.parser completed];
 
-    if (context.simulatorCrashed == NO && context.config.outputDirectory) {
-        NSString *fileName = [NSString stringWithFormat:@"TEST-%@-%lu-results.xml",
-                              [[context.config.testBundlePath lastPathComponent] stringByDeletingPathExtension],
-                              (long)context.attemptNumber];
-        NSString *outputFile = [context.config.outputDirectory stringByAppendingPathComponent:fileName];
+    if (context.simulatorCrashed == NO) {
+        NSFileManager *fileManager = NSFileManager.defaultManager;
+        if (context.config.outputDirectory) {
+            NSString *fileName = [NSString stringWithFormat:@"TEST-%@-%lu-results.xml",
+                                  [[context.config.testBundlePath lastPathComponent] stringByDeletingPathExtension],
+                                  (long)context.attemptNumber];
+            NSString *outputFile = [context.config.outputDirectory stringByAppendingPathComponent:fileName];
+            
+            [BPUtils printInfo:INFO withString:@"Writing JUnit report to: %@", outputFile];
+            BPWriter *junitLog = [[BPWriter alloc] initWithDestination:BPWriterDestinationFile andPath:outputFile];
+            [junitLog writeLine:@"%@", [context.parser generateLog:[[JUnitReporter alloc] init]]];
+            [context.parser cleanup];
+        }
+        
+        // Output screenshots for EarlGrey failures
+        if (context.config.screenshotsDirectory && context.runner.exitStatus == BPExitStatusTestsFailed) {
+            NSString *screenshotsRootDirectory = context.config.screenshotsDirectory;
+            NSString *screenshotsTestDirectory = [NSString stringWithFormat:@"%@/%@", screenshotsRootDirectory, context.runner.device.UDID];
+            NSURL *screenshotsTestURL = [NSURL fileURLWithPath:screenshotsTestDirectory];
+            
+            [BPUtils printInfo:INFO withString:@"Creating test screenshots directory: %@", screenshotsTestDirectory];
+            
+            NSError *createDirectoryError = nil;
+            [fileManager
+                   createDirectoryAtURL:screenshotsTestURL
+            withIntermediateDirectories:YES
+                             attributes:nil
+                                  error:&createDirectoryError];
+            
+            if (createDirectoryError) {
+                [BPUtils printInfo:ERROR withString:@"%@", [NSString stringWithFormat:@"Failed to create directory for screenshots: %@", [createDirectoryError localizedDescription]]];
+            }
+            
+            NSString *dataPath = context.runner.device.dataPath;
+            NSString *failureScreenshotsPath = [NSString stringWithFormat:@"%@/Containers/Data/Application", dataPath];
+            [BPUtils printInfo:INFO withString:@"Grabbing screenshots from: %@", failureScreenshotsPath];
+            
+            NSURL *directoryURL = [NSURL fileURLWithPath:failureScreenshotsPath]; // URL pointing to the directory you want to browse
+            NSArray *keys = [NSArray arrayWithObject:NSURLIsDirectoryKey];
 
-        [BPUtils printInfo:INFO withString:@"Writing JUnit report to: %@", outputFile];
-        BPWriter *junitLog = [[BPWriter alloc] initWithDestination:BPWriterDestinationFile andPath:outputFile];
-        [junitLog writeLine:@"%@", [context.parser generateLog:[[JUnitReporter alloc] init]]];
-        [context.parser cleanup];
+            NSDirectoryEnumerator *enumerator = [fileManager
+                enumeratorAtURL:directoryURL
+                includingPropertiesForKeys:keys
+                options:0
+                errorHandler:^(NSURL *url, NSError *error) {
+                    // Handle the error.
+                    // Return YES if the enumeration should continue after the error.
+                    return YES;
+            }];
+
+            for (NSURL *url in enumerator) {
+                NSError *error;
+                NSNumber *isDirectory = nil;
+                if (! [url getResourceValue:&isDirectory forKey:NSURLIsDirectoryKey error:&error]) {
+                    // handle error
+                    [BPUtils printInfo:ERROR withString:@"%@", [NSString stringWithFormat:@"Unable to get screenshot file from: %@, error: %@", url.absoluteString, [error localizedDescription]]];
+                } else if (! [isDirectory boolValue]) {
+                    // No error and it’s not a directory; do something with the file
+                    if ([url.absoluteString containsString:@"AssertionFailedException"] && [url.pathExtension containsString:@"png"]) {
+                        NSString *fileName = [url lastPathComponent];
+                        NSString *destinationPath = [NSString stringWithFormat:@"%@/%@", screenshotsTestDirectory, fileName];
+                        
+                        [BPUtils printInfo:INFO withString:@"Copying file from: %@ to: %@", url.absoluteString, destinationPath];
+                        NSURL *destination = [NSURL fileURLWithPath:destinationPath];
+                        NSError *copyError = nil;
+                        [NSFileManager.defaultManager copyItemAtURL:url toURL:destination error:&copyError];
+
+                        if (copyError) {
+                            [BPUtils printInfo:ERROR withString:@"%@", [NSString stringWithFormat:@"Failed copying screenshots: %@", [copyError localizedDescription]]];
+                        }
+                    }
+                }
+            }
+        }
     }
 
     if (context.simulatorCrashed) {
