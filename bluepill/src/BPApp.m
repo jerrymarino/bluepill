@@ -81,7 +81,7 @@
                                                                andXcodePath:xcodePath
                                                                    andError:errPtr];
         if (!xcTestFile) {
-            [BPUtils printInfo:ERROR withString:@"Failed to read data for %@", key];
+            [BPUtils printInfo:ERROR withString:@"Failed to read data for %@ %@", key, *errPtr];
             errorCount++;
             continue;
         }
