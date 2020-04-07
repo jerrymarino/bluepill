@@ -190,24 +190,32 @@ maxprocs(void)
         [BPUtils printInfo:ERROR withString:@"Packing failed: %@", [error localizedDescription]];
         return 1;
     }
-    if (bundles.count < numSims) {
-        [BPUtils printInfo:WARNING
-                withString:@"Lowering number of parallel simulators from %lu to %lu because there aren't enough test bundles.",
-                            numSims, bundles.count];
-        numSims = bundles.count;
-    }
     if (self.config.cloneSimulator) {
         self.testHostSimTemplates = [bpSimulator createSimulatorAndInstallAppWithBundles:xcTestFiles];
         if ([self.testHostSimTemplates count] == 0) {
             return 1;
         }
     }
-    [BPUtils printInfo:INFO withString:@"Running with %lu %s.",
-     (unsigned long)numSims, (numSims > 1) ? "parallel simulators" : "simulator"];
-    NSArray *copyBundles = [bundles copy];
-    for (int i = 1; i < [self.config.repeatTestsCount integerValue]; i++) {
-        [bundles addObjectsFromArray:copyBundles];
+
+    int repeatTestsCount = [self.config.repeatTestsCount intValue];
+    if (repeatTestsCount > 1) {
+        [BPUtils printInfo:INFO withString:@"Duplicating test bundles %d time(s) for test repeats", repeatTestsCount - 1];
+        NSArray *copyBundles = [bundles copy];
+        for (int i = 1; i < repeatTestsCount; i++) {
+            [bundles addObjectsFromArray:copyBundles];
+        }
     }
+
+    if (bundles.count < numSims) {
+        [BPUtils printInfo:WARNING
+                withString:@"Lowering number of parallel simulators from %lu to %lu because there aren't enough test bundles.",
+                            numSims, bundles.count];
+        numSims = bundles.count;
+    }
+
+    [BPUtils printInfo:INFO withString:@"Running with %lu %s.",
+             (unsigned long)numSims, (numSims > 1) ? "parallel simulators" : "simulator"];
+
     [BPUtils printInfo:INFO withString:@"Packed tests into %lu bundles", (unsigned long)[bundles count]];
     __block NSUInteger launchedTasks = 0;
     NSUInteger taskNumber = 0;
