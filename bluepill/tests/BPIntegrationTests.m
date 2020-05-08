@@ -21,7 +21,7 @@
 
 @implementation BPIntegrationTests
 
-- (BPConfiguration *)generateConfigWithVideoDir:(NSString *)videoDir {
+- (BPConfiguration *)generateConfigWithOutputDir:(NSString *)outputDir withVideoDir:(NSString *)videoDir {
     NSString *hostApplicationPath = [BPTestHelper sampleAppPath];
     NSString *testBundlePath = [BPTestHelper sampleAppBalancingTestsBundlePath];
     BPConfiguration *config = [[BPConfiguration alloc] initWithProgram:BP_MASTER];
@@ -36,6 +36,9 @@
     config.deviceType = @BP_DEFAULT_DEVICE_TYPE;
     config.headlessMode = YES;
     config.quiet = [BPUtils isBuildScript];
+    if (outputDir != nil) {
+        config.outputDirectory = outputDir;
+    }
     if (videoDir != nil) {
         config.videosDirectory = videoDir;
     }
@@ -43,7 +46,7 @@
 }
 
 - (BPConfiguration *)generateConfig {
-    return [self generateConfigWithVideoDir: nil];
+    return [self generateConfigWithOutputDir:nil withVideoDir:nil];
 }
 
 - (void)setUp {
@@ -224,14 +227,13 @@
 }
 
 - (void)testTwoBPInstancesWithVideo {
-    NSFileManager *fileManager = [NSFileManager defaultManager];
     NSError *mkdtempError;
     NSString *path = [BPUtils mkdtemp:@"bpout" withError:&mkdtempError];
     XCTAssertNil(mkdtempError);
     
     NSString* videoDirName = @"my_videos";
     NSString *videoPath = [path stringByAppendingPathComponent:videoDirName];
-    BPConfiguration *config = [self generateConfigWithVideoDir:videoPath];
+    BPConfiguration *config = [self generateConfigWithOutputDir:path withVideoDir:videoPath];
     config.numSims = @2;
     config.errorRetriesCount = @1;
     config.failureTolerance = @0;
@@ -253,6 +255,7 @@
     XCTAssert([runner.nsTaskList count] == 0);
     
     // Comment out the assertions because they do not pass on the bluepill repository CI machines.
+//    NSFileManager *fileManager = [NSFileManager defaultManager];
 //    NSError *dirContentsError;
 //    NSArray *directoryContent  = [fileManager contentsOfDirectoryAtPath:videoPath error:&dirContentsError];
 //    XCTAssertNil(dirContentsError);
@@ -266,6 +269,48 @@
 //    XCTAssertTrue(hasTest1);
 //    BOOL hasTest2 = [filenameSet containsObject: [NSString stringWithFormat:@"%@__%@__1.mp4", testClass, @"testExample2"]];
 //    XCTAssertTrue(hasTest2);
+}
+
+- (void)testTwoBPInstancesForDeviceLogs {
+    NSError *mkdtempError;
+    NSString *path = [BPUtils mkdtemp:@"bpout" withError:&mkdtempError];
+    XCTAssertNil(mkdtempError);
+    
+    BPConfiguration *config = [self generateConfigWithOutputDir:path withVideoDir:nil];
+    config.numSims = @2;
+    config.errorRetriesCount = @1;
+    config.failureTolerance = @0;
+    // This looks backwards but we want the main app to be the runner
+    // and the sampleApp is launched from the callback.
+    config.testBundlePath = [BPTestHelper sampleAppUITestBundlePath];
+    config.testRunnerAppPath = [BPTestHelper sampleAppPath];
+    config.appBundlePath = [BPTestHelper sampleAppUITestRunnerPath];
+
+    NSError *err;
+    BPApp *app = [BPApp appWithConfig:config
+                            withError:&err];
+    NSString *bpPath = [BPTestHelper bpExecutablePath];
+
+    BPRunner *runner = [BPRunner BPRunnerWithConfig:config withBpPath:bpPath];
+    XCTAssert(runner != nil);
+    int rc = [runner runWithBPXCTestFiles:app.testBundles];
+    XCTAssert(rc == 0);
+    XCTAssert([runner.nsTaskList count] == 0);
+    
+    NSFileManager *fileManager = [NSFileManager defaultManager];
+    NSArray *bp1Output  = [fileManager contentsOfDirectoryAtPath:[path stringByAppendingPathComponent:@"BP-1"] error:nil];
+    NSArray *bp2Output  = [fileManager contentsOfDirectoryAtPath:[path stringByAppendingPathComponent:@"BP-2"] error:nil];
+
+    NSString *testClass = @"BPSampleAppUITests";
+    NSSet *filenameSet1 = [NSSet setWithArray:bp1Output];
+    XCTAssertTrue([filenameSet1 containsObject:@"1-simulator.log"]);
+    NSString *testDeviceLog1 = [NSString stringWithFormat:@"%@__%@__1_system.log", testClass, @"testExample"];
+    XCTAssertTrue([filenameSet1 containsObject:testDeviceLog1]);
+                           
+    NSSet *filenameSet2 = [NSSet setWithArray:bp2Output];
+    XCTAssertTrue(([filenameSet2 containsObject:@"1-simulator.log"]));
+    NSString *testDeviceLog2 = [NSString stringWithFormat:@"%@__%@__1_system.log", testClass, @"testExample2"];
+    XCTAssertTrue([filenameSet2 containsObject:testDeviceLog2]);
 }
 
 @end
